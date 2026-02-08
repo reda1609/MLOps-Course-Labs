@@ -172,3 +172,31 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# ========================================
+# Project-specific ignores
+# ========================================
+
+# Virtual environment (project-specific)
+churn_prediction/
+
+# MLflow tracking and artifacts
+mlruns/
+mlartifacts/
+
+# Generated model artifacts
+*.pkl
+*.h5
+*.pth
+*.ckpt
+
+# Generated plots and visualizations
+*.png
+*.jpg
+*.jpeg
+
+# VS Code settings (optional - uncomment if you want to share settings)
+.vscode/
+
+# Logs
+*.log
