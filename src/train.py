@@ -1,174 +1,88 @@
 """
-This module contains functions to preprocess and train the model
-for bank consumer churn prediction.
+Main training script for bank customer churn prediction.
+Orchestrates data loading, preprocessing, model training, and evaluation with MLflow tracking.
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.utils import resample
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.compose import make_column_transformer
-from sklearn.preprocessing import OneHotEncoder,  StandardScaler
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-)
+
+
+import logging
+import os
 
 ### Import MLflow
+import mlflow
 
-def rebalance(data):
-    """
-    Resample data to keep balance between target classes.
+# Import project modules
+from preprocessing import load_data, preprocess
+from models import train_model
+from evaluation import calculate_metrics, log_metrics, create_confusion_matrix
+from config import (
+    DATA_PATH, MLFLOW_TRACKING_URI, EXPERIMENT_NAME,
+    MODEL_TYPE, LOGISTIC_PARAMS, RF_PARAMS
+)
 
-    The function uses the resample function to downsample the majority class to match the minority class.
+# Set user name for MLflow runs
+os.environ['LOGNAME'] = 'ahmed reda'
 
-    Args:
-        data (pd.DataFrame): DataFrame
-
-    Returns:
-        pd.DataFrame): balanced DataFrame
-    """
-    churn_0 = data[data["Exited"] == 0]
-    churn_1 = data[data["Exited"] == 1]
-    if len(churn_0) > len(churn_1):
-        churn_maj = churn_0
-        churn_min = churn_1
-    else:
-        churn_maj = churn_1
-        churn_min = churn_0
-    churn_maj_downsample = resample(
-        churn_maj, n_samples=len(churn_min), replace=False, random_state=1234
-    )
-
-    return pd.concat([churn_maj_downsample, churn_min])
-
-
-def preprocess(df):
-    """
-    Preprocess and split data into training and test sets.
-
-    Args:
-        df (pd.DataFrame): DataFrame with features and target variables
-
-    Returns:
-        ColumnTransformer: ColumnTransformer with scalers and encoders
-        pd.DataFrame: training set with transformed features
-        pd.DataFrame: test set with transformed features
-        pd.Series: training set target
-        pd.Series: test set target
-    """
-    filter_feat = [
-        "CreditScore",
-        "Geography",
-        "Gender",
-        "Age",
-        "Tenure",
-        "Balance",
-        "NumOfProducts",
-        "HasCrCard",
-        "IsActiveMember",
-        "EstimatedSalary",
-        "Exited",
-    ]
-    cat_cols = ["Geography", "Gender"]
-    num_cols = [
-        "CreditScore",
-        "Age",
-        "Tenure",
-        "Balance",
-        "NumOfProducts",
-        "HasCrCard",
-        "IsActiveMember",
-        "EstimatedSalary",
-    ]
-    data = df.loc[:, filter_feat]
-    data_bal = rebalance(data=data)
-    X = data_bal.drop("Exited", axis=1)
-    y = data_bal["Exited"]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, random_state=1912
-    )
-    col_transf = make_column_transformer(
-        (StandardScaler(), num_cols), 
-        (OneHotEncoder(handle_unknown="ignore", drop="first"), cat_cols),
-        remainder="passthrough",
-    )
-
-    X_train = col_transf.fit_transform(X_train)
-    X_train = pd.DataFrame(X_train, columns=col_transf.get_feature_names_out())
-
-    X_test = col_transf.transform(X_test)
-    X_test = pd.DataFrame(X_test, columns=col_transf.get_feature_names_out())
-
-    # Log the transformer as an artifact
-
-    return col_transf, X_train, X_test, y_train, y_test
-
-
-def train(X_train, y_train):
-    """
-    Train a logistic regression model.
-
-    Args:
-        X_train (pd.DataFrame): DataFrame with features
-        y_train (pd.Series): Series with target
-
-    Returns:
-        LogisticRegression: trained logistic regression model
-    """
-    log_reg = LogisticRegression(max_iter=1000)
-    log_reg.fit(X_train, y_train)
-
-    ### Log the model with the input and output schema
-    # Infer signature (input and output schema)
-
-    # Log model
-
-    ### Log the data
-
-    return log_reg
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def main():
+    """Main training pipeline with MLflow tracking."""
+    logger.info("=== Starting Churn Prediction Training Pipeline ===")
+    
     ### Set the tracking URI for MLflow
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    logger.info(f"MLflow tracking URI: {MLFLOW_TRACKING_URI}")
 
     ### Set the experiment name
+    mlflow.set_experiment(EXPERIMENT_NAME)
+    logger.info(f"Experiment name: {EXPERIMENT_NAME}")
 
+    # Get model parameters from config
+    MODEL_PARAMS = LOGISTIC_PARAMS if MODEL_TYPE == "logistic" else RF_PARAMS
+    logger.info(f"Model type: {MODEL_TYPE}")
+    logger.info(f"Model parameters: {MODEL_PARAMS}")
 
     ### Start a new run and leave all the main function code as part of the experiment
+    run_name = f"{MODEL_TYPE}_model_{list(MODEL_PARAMS.values())[0]}"
+    with mlflow.start_run(run_name=run_name):
+        logger.info(f"MLflow run started: {run_name}")
+        
+        # Load and preprocess data
+        df = load_data(DATA_PATH)
+        col_transf, X_train, X_test, y_train, y_test = preprocess(df)
 
-    df = pd.read_csv("data/Churn_Modelling.csv")
-    col_transf, X_train, X_test, y_train, y_test = preprocess(df)
+        ### Log the model parameters
+        mlflow.log_param("model_type", MODEL_TYPE)
+        for param_name, param_value in MODEL_PARAMS.items():
+            mlflow.log_param(param_name, param_value)
+        logger.info("Parameters logged to MLflow")
 
-    ### Log the max_iter parameter
+        # Train model (includes MLflow logging inside)
+        model = train_model(X_train, y_train, model_type=MODEL_TYPE, **MODEL_PARAMS)
 
-    model = train(X_train, y_train)
+        # Make predictions
+        logger.info("Making predictions on test set")
+        y_pred = model.predict(X_test)
 
-    
-    y_pred = model.predict(X_test)
+        ### Log metrics after calculating them
+        metrics = calculate_metrics(y_test, y_pred)
+        log_metrics(metrics)
 
-    ### Log metrics after calculating them
+        ### Log tag
+        mlflow.set_tag("model_type", MODEL_TYPE)
+        mlflow.set_tag("framework", "scikit-learn")
+        logger.info("Tags set in MLflow")
 
-
-    ### Log tag
-
-
-    
-    conf_mat = confusion_matrix(y_test, y_pred, labels=model.classes_)
-    conf_mat_disp = ConfusionMatrixDisplay(
-        confusion_matrix=conf_mat, display_labels=model.classes_
-    )
-    conf_mat_disp.plot()
-    
-    # Log the image as an artifact in MLflow
-    
-    plt.show()
+        # Create and log confusion matrix artifact
+        create_confusion_matrix(y_test, y_pred, model, MODEL_TYPE)
+        
+        logger.info("=== Training pipeline completed successfully ===")
 
 
 if __name__ == "__main__":
