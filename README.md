@@ -2,19 +2,40 @@
 
 This project trains machine learning models to predict customer churn for a bank using MLflow for experiment tracking.
 
+## Project Structure
+
+```
+src/
+├── train.py          # Main training script with MLflow tracking
+├── config.py         # Configuration settings and hyperparameters
+├── preprocessing.py  # Data loading and preprocessing functions
+├── models.py         # Model creation and training logic
+└── evaluation.py     # Metrics calculation and visualization
+```
+
 ## Dataset
 
 The `Churn_Modelling.csv` dataset contains customer information including credit score, geography, gender, age, tenure, balance, and whether they exited (churned). The preprocessing pipeline balances the classes by downsampling the majority class.
 
 ## Setup
 
-First, activate the virtual environment:
+Create a virtual environment:
 
 ```bash
-churn_prediction\Scripts\activate
+python -m venv churn_prediction
 ```
 
-Install dependencies if needed:
+Activate the virtual environment:
+
+```bash
+# On Windows
+churn_prediction\Scripts\activate
+
+# On Linux/Mac
+source churn_prediction/bin/activate
+```
+
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -34,10 +55,11 @@ Then run the training script:
 python src/train.py
 ```
 
-You can configure different models and hyperparameters by editing the configuration section in `main()`:
+To configure different models and hyperparameters, edit values in `src/config.py`:
 
 - `MODEL_TYPE`: Choose between `"logistic"` or `"random_forest"`
-- `MODEL_PARAMS`: Dictionary of hyperparameters for the selected model
+- `LOGISTIC_PARAMS`: Logistic regression hyperparameters
+- `RF_PARAMS`: Random forest hyperparameters
 
 ## What Gets Logged
 
@@ -48,6 +70,8 @@ Each training run logs:
 - Column transformer as pickle file
 - Training dataset
 - Confusion matrix plot
+
+The script also includes detailed logging to track pipeline execution.
 
 ## Viewing Results
 
